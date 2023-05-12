@@ -61,10 +61,14 @@ class AirportsKnowledgeBase(InMemoryKnowledgeBase):
                     self.data["airport"].append(airport)
 
     def find_airport_by_ref(self, airport_ref):
-        for airport in self.data["airport"]:
-            if airport["iata_code"] == airport_ref:
-                return airport
-        return None
+        return next(
+            (
+                airport
+                for airport in self.data["airport"]
+                if airport["iata_code"] == airport_ref
+            ),
+            None,
+        )
 
     def find_airports_by_city_or_code(self, city):
 
@@ -91,9 +95,7 @@ class AirportsKnowledgeBase(InMemoryKnowledgeBase):
     @staticmethod
     def flight_class_code(code):
         codes = {"economy": "Y", "premium": "W", "business": "B", "first": "F"}
-        if code in codes:
-            return codes[code]
-        return "Y"
+        return codes.get(code, "Y")
 
     @staticmethod
     def co2_kg_interpolation(distance_km, flight_class, include_rfi=True):
@@ -205,8 +207,7 @@ class AirportsKnowledgeBase(InMemoryKnowledgeBase):
 
         unit_string = "kg" if unit == "kilograms" else "tons"
 
-        co2 = (f"{ceil(10 * co2_kg / kilos_per_unit) * 0.1:.1f} {unit_string}",)
-        return co2
+        return (f"{ceil(10 * co2_kg / kilos_per_unit) * 0.1:.1f} {unit_string}",)
 
 
 class StartAction(Action):
@@ -226,12 +227,12 @@ class StartAction(Action):
     ):  # type: (...) -> List[Dict[Text, Any]]
 
         url = f"https://rasa.com/carbon/index.html?" \
-              f"&rasaxhost=https://carbon.rasa.com" \
-              f"&conversationId={tracker.sender_id}" \
-              f"&destination=https://offset.earth%2F%3Fr%3D5de3ac5d7e813f00184649ea"
+                  f"&rasaxhost=https://carbon.rasa.com" \
+                  f"&conversationId={tracker.sender_id}" \
+                  f"&destination=https://offset.earth%2F%3Fr%3D5de3ac5d7e813f00184649ea"
 
-        link_1_url = url + f"&label=link-1-clicked"
-        link_2_url = url + f"&label=link-2-clicked"
+        link_1_url = f"{url}&label=link-1-clicked"
+        link_2_url = f"{url}&label=link-2-clicked"
 
         return [SlotSet("link_1_url", link_1_url), SlotSet("link_2_url", link_2_url)]
 
@@ -279,14 +280,14 @@ class ValidateAirTravelForm(FormValidationAction):
             return {}
 
         candidates = AIRPORT_KB.find_airports_by_city_or_code(location)
-        if len(candidates) > 0:
-            result = {
+        return (
+            {
                 f"travel_{kind}": candidates[0]["name"],
                 f"iata_{kind}": candidates[0]["iata_code"],
             }
-        else:
-            result = {f"travel_{kind}": None, f"iata_{kind}": None}
-        return result
+            if len(candidates) > 0
+            else {f"travel_{kind}": None, f"iata_{kind}": None}
+        )
 
 
 
@@ -320,28 +321,25 @@ class CalculateOffsets(Action):
         destination_airport = tracker.get_slot("travel_destination")
         destination_iata = tracker.get_slot("iata_destination")
         travel_flight_class = tracker.get_slot("travel_flight_class")
-        if True:
-            message = (
-                f"A one-way flight from {departure_airport} ({departure_iata}) to {destination_airport} ({destination_iata}) "
-                f"in {travel_flight_class} class emits {co2_in_tons[0]} of CO2. "
-                f"It would be amazing if you bought offsets for that carbon! "
-                f"There are some great, UN-certified projects you can pick from."
-            )
+        message = (
+            f"A one-way flight from {departure_airport} ({departure_iata}) to {destination_airport} ({destination_iata}) "
+            f"in {travel_flight_class} class emits {co2_in_tons[0]} of CO2. "
+            f"It would be amazing if you bought offsets for that carbon! "
+            f"There are some great, UN-certified projects you can pick from."
+        )
         if tracker.get_latest_input_channel() == "facebook":
             payload = hyperlink_payload(tracker, message, "Buy Offsets", url)
             dispatcher.utter_custom_json(payload)
         else:
-            dispatcher.utter_message(message + f" [Buy Offsets]({url})")
+            dispatcher.utter_message(f"{message} [Buy Offsets]({url})")
 
-        slots_to_set = [
-            SlotSet("travel_departure"), 
-            SlotSet("iata_departure"), 
+        return [
+            SlotSet("travel_departure"),
+            SlotSet("iata_departure"),
             SlotSet("travel_destination"),
             SlotSet("iata_destination"),
             SlotSet("travel_flight_class"),
         ]
-
-        return slots_to_set
 
 class ExplainTypicalEmissions(Action):
     def name(self):
@@ -357,7 +355,7 @@ class ExplainTypicalEmissions(Action):
             payload = hyperlink_payload(tracker, message, "Buy Offsets", url)
             dispatcher.utter_custom_json(payload)
         else:
-            dispatcher.utter_message(message + f" [Buy Offsets]({url})")
+            dispatcher.utter_message(f"{message} [Buy Offsets]({url})")
         return []
 
 
@@ -388,7 +386,7 @@ class ActionDisclaimer(Action):
             payload = hyperlink_payload(tracker, message, "Privacy Policy", url)
             dispatcher.utter_custom_json(payload)
         else:
-            dispatcher.utter_message(message + f" [Privacy Policy]({url})")
+            dispatcher.utter_message(f"{message} [Privacy Policy]({url})")
         return []
 
 
